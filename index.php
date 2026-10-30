@@ -1,9 +1,7 @@
 <?php
 include("db.php");
 
-// Skips the stray header row ("Fruit" / "Price") that came from the CSV import.
-// Best fix: also delete that row in phpMyAdmin.
-$sql = "SELECT * FROM fruitsandveggies WHERE Fruit <> 'Fruit' ORDER BY Productid";
+$sql = "SELECT * FROM fruitsandveggies WHERE Fruit <> 'Fruit'";
 $result = mysqli_query($conn, $sql);
 
 if (!$result) {
@@ -11,6 +9,34 @@ if (!$result) {
 }
 
 $status = $_GET["status"] ?? "";
+
+$colCheck    = mysqli_query($conn, "SHOW COLUMNS FROM fruitsandveggies LIKE 'Category'");
+$hasCategory = $colCheck && mysqli_num_rows($colCheck) > 0;
+
+$vegetableWords = [
+    "bitter melon", "ampalaya", "broccoli", "cabbage", "repolyo", "carrot", "cauliflower",
+    "eggplant", "talong", "tomato", "squash", "kalabasa", "pumpkin", "okra", "string bean",
+    "long bean", "sitaw", "bean", "kangkong", "spinach", "pechay", "lettuce", "onion",
+    "sibuyas", "garlic", "bawang", "potato", "patatas", "cucumber", "pipino", "corn",
+    "radish", "labanos", "ginger", "pepper", "chili", "siling", "sayote", "upo",
+    "malunggay", "kamote", "camote", "gabi", "singkamas", "celery", "mushroom"
+];
+$vegPattern = "/\\b(" . implode("|", array_map(function ($w) { return preg_quote($w, "/"); }, $vegetableWords)) . ")s?\\b/i";
+
+$fruits = [];
+$veggies = [];
+while ($row = mysqli_fetch_assoc($result)) {
+    if ($hasCategory) {
+        $isVeg = stripos((string)$row["Category"], "veg") !== false;
+    } else {
+        $isVeg = preg_match($vegPattern, (string)$row["Fruit"]) === 1;
+    }
+      if ($isVeg) { $veggies[] = $row; } else { $fruits[] = $row; }
+}
+
+// Image folder (URL path and the real folder on disk)
+$imgUrlDir  = "images/images/";
+$imgDiskDir = __DIR__ . "/images/images/";
 
 // Image folder (URL path and the real folder on disk)
 $imgUrlDir  = "images/images/";
@@ -42,72 +68,59 @@ function productImage($name, $urlDir, $diskDir)
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
-        body { background-color: #f8d7da; }
+        :root { --green:#2f7d3b; --green-dark:#17382a; --orange:#c2410c; --bg:#f2f4ef; --line:#d9dfd3; }
+        html { scroll-behavior:smooth; scroll-padding-top:96px; }
+        body { background:var(--bg); color:#1d2a22; }
 
-        .navbar-brand img { width: 50px; height: 50px; object-fit: contain; margin-right: 10px; }
+        .kiosk-header { background:var(--green-dark); }
+        .navbar-brand img { width:52px; height:52px; object-fit:contain; margin-right:10px; border-radius:10px; background:#fff; padding:2px; }
+        .navbar-toggler { border-color:rgba(255,255,255,.6); }
+        .navbar-toggler-icon { filter:invert(1); }
 
-        .product-card {
-            height: 100%;
-            transition: transform .2s ease;
-        }
-        .product-card:hover { transform: translateY(-4px); }
+        .btn-nav { color:#fff; border:2px solid rgba(255,255,255,.45); border-radius:12px; padding:.55rem 1.3rem; font-weight:600; background:transparent; }
+        .btn-nav:hover, .btn-nav:focus-visible { background:rgba(255,255,255,.15); color:#fff; border-color:#fff; }
+        .btn-nav.active { background:#fff; color:var(--green-dark); border-color:#fff; }
 
-        .product-img {
-            width: 100%;
-            height: 190px;
-            object-fit: contain;
-            padding: 15px;
-        }
+        .category-tabs { gap:12px; }
+        .category-tabs .nav-link { background:#fff; color:var(--green-dark); border:2px solid var(--line); border-radius:14px; padding:.9rem 2rem; font-size:1.2rem; font-weight:700; min-width:180px; }
+        .category-tabs .nav-link .count { background:var(--bg); color:#55635a; border-radius:999px; padding:.1rem .6rem; font-size:.9rem; margin-left:.4rem; }
+        .category-tabs .nav-link.active { background:var(--green); border-color:var(--green); color:#fff; }
+        .category-tabs .nav-link.active .count { background:rgba(255,255,255,.25); color:#fff; }
 
-        .modal-product-img {
-            width: 100%;
-            height: 200px;
-            object-fit: contain;
-            padding: 15px;
-        }
+        .card { height:100%; border-color:var(--line) !important; transition:box-shadow .2s ease; }
+        .card:hover { box-shadow:0 6px 18px rgba(23,56,42,.12) !important; transform:none; }
+        .product-img { width:100%; height:190px; object-fit:contain; padding:15px; }
+        .modal-product-img { width:100%; height:200px; object-fit:contain; padding:15px; }
 
-        .btn-order { background-color: #dc3545; color: #fff; }
-        .btn-order:hover, .btn-order:focus-visible { background-color: #bb2d3b; color: #fff; }
+        .btn-order { background:var(--green); color:#fff; font-weight:700; }
+        .btn-order:hover, .btn-order:focus-visible { background:#256530; color:#fff; }
+        .card-body .fw-bold { color:var(--orange); }
 
-        .total-amount { color: #dc3545; }
-
-        footer {
-            background-color: #343a40;
-            color: #fff;
-            padding: 20px;
-            text-align: center;
-            margin-top: 50px;
-        }
-        footer a { color: #fff; text-decoration: none; }
-        footer a:hover { text-decoration: underline; }
-
-        @media (prefers-reduced-motion: reduce) {
-            .product-card { transition: none; }
-            .product-card:hover { transform: none; }
-        }
+        footer { background:var(--green-dark); color:#d6e3da; padding:20px; text-align:center; margin-top:50px; }
+        footer a { color:#fff; text-decoration:none; }
+        footer a:hover { text-decoration:underline; }
     </style>
 </head>
 
 <body>
 
     <!-- NAVBAR -->
-    <nav class="navbar navbar-expand-lg bg-light border-bottom border-dark">
+      <nav class="navbar navbar-expand-lg kiosk-header sticky-top py-2">
         <div class="container">
             <a class="navbar-brand d-flex align-items-center" href="#">
                 <img src="<?= $imgUrlDir ?>logo.png" alt="" onerror="this.style.display='none'">
-                <span class="h4 mb-0">Palengke Kiosk</span>
+                 <span class="h4 mb-0 text-white">Palengke Kiosk</span>
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle menu">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-            <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link active" href="#">Home</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#about">About Us</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#contact">Contact Us</a></li>
-                </ul>
+                <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+            <div class="d-flex flex-column flex-lg-row gap-2 mt-3 mt-lg-0">
+                <a class="btn btn-nav active" href="#">Home</a>
+                <a class="btn btn-nav" href="#about">About Us</a>
+                <a class="btn btn-nav" href="#contact">Contact Us</a>
             </div>
         </div>
     </nav>
@@ -123,11 +136,28 @@ function productImage($name, $urlDir, $diskDir)
     <?php } ?>
 
     <!-- PRODUCTS -->
-    <div class="container mt-5">
-        <h2 class="text-center mb-4">Fresh Fruits and Vegetables</h2>
+          <div class="container mt-5">
+        <h2 class="text-center mb-4">What would you like to buy today?</h2>
 
+        <ul class="nav nav-pills category-tabs justify-content-center mb-4">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#fruits" type="button">
+                    Fruits <span class="count"><?= count($fruits) ?></span>
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#veggies" type="button">
+                    Vegetables <span class="count"><?= count($veggies) ?></span>
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+        <?php foreach (["fruits" => $fruits, "veggies" => $veggies] as $paneId => $items) { ?>
+        <div class="tab-pane fade <?= $paneId === "fruits" ? "show active" : "" ?>" id="<?= $paneId ?>">
         <div class="row">
-            <?php while ($row = mysqli_fetch_assoc($result)) {
+            <?php foreach ($items as $row) {
+
                 $id       = (int)$row["Productid"];
                 $name     = htmlspecialchars($row["Fruit"]);
                 $rawPrice = (float)$row["Price"];
@@ -161,12 +191,12 @@ function productImage($name, $urlDir, $diskDir)
                         <div class="modal-dialog modal-dialog-centered">
                             <div class="modal-content">
 
-                                <div class="modal-header bg-danger-subtle">
+                                <div class="modal-header bg-danger-light">
                                     <h5 class="modal-title" id="title-<?= $id ?>">Order <?= $name ?></h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                 </div>
 
-                                <div class="modal-body bg-danger-subtle">
+                                <div class="modal-body bg-danger-light">
                                     <div class="card border-dark rounded-4">
                                         <img src="<?= htmlspecialchars($imagePath) ?>"
                                              alt="<?= $name ?>"
@@ -217,6 +247,9 @@ function productImage($name, $urlDir, $diskDir)
             <?php } ?>
         </div>
     </div>
+    <?php } ?>
+        </div>  
+        </div>
 
     <!-- ABOUT US -->
     <section id="about" class="container mt-5">
