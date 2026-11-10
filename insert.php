@@ -1,7 +1,8 @@
 <?php
+session_start();
 include("db.php");
 
-// The form uses method="POST", so we must read $_POST (the old code only ran for GET)
+// The form uses method="POST"
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     header("Location: index.php");
     exit;
@@ -16,8 +17,8 @@ if ($productid <= 0 || $qty <= 0 || $user === "" || $contact === "") {
     die("Missing or invalid order details. <a href='index.php'>Go back</a>");
 }
 
-// Get the real price from the database (table name: fruitsandveggies)
-$stmt = $conn->prepare("SELECT Price FROM fruitsandveggies WHERE Productid = ?");
+// Get the real product details from the database
+$stmt = $conn->prepare("SELECT Fruit, Price, Image FROM fruitsandveggies WHERE Productid = ?");
 $stmt->bind_param("i", $productid);
 $stmt->execute();
 $product = $stmt->get_result()->fetch_assoc();
@@ -37,10 +38,24 @@ if (!$stmt) {
 $stmt->bind_param("iidss", $productid, $qty, $total, $user, $contact);
 
 if ($stmt->execute()) {
+    $orderId = $conn->insert_id;   // 0 if the orders table has no auto-increment id
     $stmt->close();
-    header("Location: index.php?status=success");
+
+    // Keep the details so the confirmation page can show them
+    $_SESSION["last_order"] = [
+        "number"  => $orderId > 0 ? str_pad((string)$orderId, 6, "0", STR_PAD_LEFT) : strtoupper(substr(uniqid(), -6)),
+        "product" => $product["Fruit"],
+        "image"   => $product["Image"],
+        "price"   => (float)$product["Price"],
+        "qty"     => $qty,
+        "total"   => (float)$total,
+        "user"    => $user,
+        "contact" => $contact,
+        "time"    => date("M d, Y h:i A"),
+    ];
+
+    header("Location: order-success.php");
     exit;
 }
 
-// If it fails, show the real reason instead of hiding it
 die("Could not save order: " . $stmt->error . " <a href='index.php'>Go back</a>");
